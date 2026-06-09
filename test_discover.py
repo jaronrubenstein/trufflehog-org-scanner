@@ -71,3 +71,23 @@ def test_discover_repo_os_error():
         assert repo is None
 
 
+def test_find_executable_on_path():
+    with patch("shutil.which", return_value="/usr/local/bin/my-tool"):
+        from discover import find_executable
+        assert find_executable("my-tool") == "/usr/local/bin/my-tool"
+
+def test_find_executable_fallback_exists():
+    with patch("shutil.which", return_value=None), \
+         patch("os.path.exists", side_effect=lambda p: p == "/opt/homebrew/bin/my-tool"), \
+         patch("os.access", return_value=True):
+        from discover import find_executable
+        assert find_executable("my-tool") == "/opt/homebrew/bin/my-tool"
+
+def test_find_executable_not_found():
+    with patch("shutil.which", return_value=None), \
+         patch("os.path.exists", return_value=False):
+        from discover import find_executable
+        assert find_executable("my-tool") == "my-tool"
+
+
+

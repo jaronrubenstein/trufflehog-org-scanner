@@ -4,15 +4,16 @@ import os
 import json
 import pytest
 import subprocess
-from discover import discover_repos, discover_repo
+import shutil
+from discover import discover_repos, discover_repo, find_executable
 from report import generate_html_report
 
 def verify_tools():
     missing = []
     for tool in ["gh", "trufflehog"]:
-        try:
-            subprocess.run(["which", tool], capture_output=True, check=True)
-        except Exception:
+        path = find_executable(tool)
+        # If the path returned is just the name and shutil.which doesn't find it, it's missing
+        if path == tool and not shutil.which(tool):
             missing.append(tool)
     if missing:
         print(f"Error: Missing required system dependencies: {', '.join(missing)}", file=sys.stderr)
@@ -58,7 +59,8 @@ def main():
         
     # Resolve gh auth token once and inject into environment for parallel workers
     try:
-        res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
+        gh_bin = find_executable("gh")
+        res = subprocess.run([gh_bin, "auth", "token"], capture_output=True, text=True, check=True)
         token = res.stdout.strip()
         if token:
             os.environ["GITHUB_TOKEN"] = token

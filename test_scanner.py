@@ -3,6 +3,7 @@ import subprocess
 import json
 import os
 from typing import Any
+from discover import find_executable
 
 def format_repo_url(url: str) -> str:
     """Formats a git SSH or HTTPS URL into a standard HTTPS URL for TruffleHog git scanning.
@@ -69,7 +70,8 @@ def get_gh_token() -> str:
     if token:
         return token
     try:
-        res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
+        gh_bin = find_executable("gh")
+        res = subprocess.run([gh_bin, "auth", "token"], capture_output=True, text=True, check=True)
         return res.stdout.strip()
     except Exception:
         return ""
@@ -112,13 +114,35 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
     if token:
         repo_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
     
-    cmd = ["trufflehog", "git", repo_url, "--json", "--no-verification"]
+    trufflehog_bin = find_executable("trufflehog")
+    cmd = [trufflehog_bin, "git", repo_url, "--json", "--no-verification"]
     
     # Run trufflehog
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    
-    # Exit code of TruffleHog: 0 if no secrets, 183 if secrets found, or others on error
-    findings = parse_trufflehog_output(proc.stdout)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        findings = parse_trufflehog_output(proc.stdout)
+        error_msg = proc.stderr if proc.returncode not in [0, 183] else ""
+    except FileNotFoundError:
+        findings = []
+        error_msg = f"TruffleHog executable not found. Checked path: '{trufflehog_bin}'. Please ensure TruffleHog is installed and available in the system PATH."
+        
+        # Save output report
+        repos_dir = os.path.join(output_dir, "repos")
+        os.makedirs(repos_dir, exist_ok=True)
+        result_file = os.path.join(repos_dir, f"{repo_name.replace('/', '_')}.json")
+        
+        report_data = {
+            "repo_name": repo_name,
+            "is_private": is_private,
+            "scan_status": "clean",
+            "findings": findings,
+            "error": error_msg
+        }
+        
+        with open(result_file, "w") as f:
+            json.dump(report_data, f, indent=2)
+            
+        pytest.fail(error_msg)
     
     # Save output report
     repos_dir = os.path.join(output_dir, "repos")
@@ -130,10 +154,61 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         "is_private": is_private,
         "scan_status": "clean" if len(findings) == 0 else "compromised",
         "findings": findings,
-        "error": proc.stderr if proc.returncode not in [0, 183] else ""
+        "error": error_msg
     }
     
     with open(result_file, "w") as f:
         json.dump(report_data, f, indent=2)
         
     assert len(findings) == 0, f"Found {len(findings)} potential secrets in {repo_name}"
+
+
+def test_scan_repo_trufflehog_not_found_graceful(tmp_path, monkeypatch) -> None:
+    """Verifies that test_scan_repo handles FileNotFoundError gracefully when trufflehog is missing."""
+    import test_scanner
+    
+    # Mock format_repo_url to avoid network dependencies
+    monkeypatch.setattr(test_scanner, "format_repo_url", lambda url: "https://github.com/org/test-repo")
+    monkeypatch.setattr(test_scanner, "get_gh_token", lambda: "mock_token")
+    
+    # Force find_executable to return a custom path
+    monkeypatch.setattr(test_scanner, "find_executable", lambda name: f"/mock/path/{name}")
+    
+    # Mock subprocess.run to raise FileNotFoundError
+    def mock_run(cmd, *args, **kwargs):
+        if "trufflehog" in cmd[0]:
+            raise FileNotFoundError("[Errno 2] No such file or directory: 'trufflehog'")
+        raise ValueError("Unexpected command")
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    # Mock pytest.FixtureRequest
+    class MockConfig:
+        def getoption(self, name):
+            if name == "--output-dir":
+                return str(tmp_path)
+            return None
+            
+    class MockRequest:
+        config = MockConfig()
+        
+    repo_info = {
+        "name": "org/test-repo",
+        "is_private": False,
+        "ssh_url": "git@github.com:org/test-repo.git"
+    }
+    
+    # The test should fail with pytest.fail showing our custom message
+    with pytest.raises(pytest.fail.Exception) as exc_info:
+        test_scanner.test_scan_repo(repo_info, MockRequest())
+        
+    assert "TruffleHog executable not found" in str(exc_info.value)
+    
+    # Verify the JSON report was written correctly with error state
+    result_file = tmp_path / "repos" / "org_test-repo.json"
+    assert result_file.exists()
+    with open(result_file, "r") as f:
+        data = json.load(f)
+        assert data["repo_name"] == "org/test-repo"
+        assert data["scan_status"] == "clean"
+        assert "TruffleHog executable not found" in data["error"]
+

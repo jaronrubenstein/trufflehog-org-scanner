@@ -1,12 +1,32 @@
 import subprocess
 import json
 import sys
+import os
+import shutil
 from typing import Any
+
+def find_executable(name: str) -> str:
+    """Finds the absolute path of an executable, checking common fallback paths if not on PATH."""
+    path = shutil.which(name)
+    if path:
+        return path
+    # Fallback paths for macOS / Linux
+    fallback_paths = [
+        f"/opt/homebrew/bin/{name}",
+        f"/usr/local/bin/{name}",
+        f"/usr/bin/{name}",
+        f"/bin/{name}"
+    ]
+    for p in fallback_paths:
+        if os.path.exists(p) and os.access(p, os.X_OK):
+            return p
+    return name
 
 def discover_repos(org: str) -> list[dict[str, Any]]:
     """Fetches all repositories for the given GitHub organization."""
+    gh_bin = find_executable("gh")
     cmd = [
-        "gh", "repo", "list", org,
+        gh_bin, "repo", "list", org,
         "--json", "name,sshUrl,isPrivate,pushedAt",
         "--limit", "1000"
     ]
@@ -37,8 +57,9 @@ def discover_repo(org: str, repo: str) -> dict[str, Any] | None:
     """Fetches metadata for a single specific repository under the given organization."""
     if "/" in repo:
         repo = repo.split("/")[-1]
+    gh_bin = find_executable("gh")
     cmd = [
-        "gh", "repo", "view", f"{org}/{repo}",
+        gh_bin, "repo", "view", f"{org}/{repo}",
         "--json", "name,sshUrl,isPrivate,pushedAt"
     ]
     try:
@@ -55,5 +76,6 @@ def discover_repo(org: str, repo: str) -> dict[str, Any] | None:
             print(f"Error fetching repo {org}/{repo} via gh: {e.stderr}", file=sys.stderr)
         else:
             print(f"Error executing gh binary (system error): {e}", file=sys.stderr)
-        return None
+            return None
+
 

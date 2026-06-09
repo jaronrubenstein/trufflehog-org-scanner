@@ -1,0 +1,7 @@
+{
+  "repo_name": "example-repo",
+  "is_private": false,
+  "scan_status": "clean",
+  "findings": [],
+  "error": "{\"level\":\"error\",\"ts\":\"2026-06-08T21:27:16-04:00\",\"logger\":\"trufflehog\",\"msg\":\"error running scan\",\"error\":\"failed to scan Git: error preparing repo: failed to clone authenticated Git repo (https://x-access-token:xxxxx@github.com/example/test-repo): could not clone repo: https://github.com/example/test-repo, error executing git clone: exit status 128, remote: Repository not found.\\nfatal: repository 'https://github.com/example/test-repo/' not found\\n\"}\n"
+}

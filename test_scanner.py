@@ -115,13 +115,40 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         repo_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
     
     trufflehog_bin = find_executable("trufflehog")
-    cmd = [trufflehog_bin, "git", repo_url, "--json", "--no-verification"]
+    cmd = [
+        trufflehog_bin, "git", repo_url, 
+        "--json", 
+        "--no-verification", 
+        "--no-update",
+        "--exclude-globs=**/venv/**,**/.venv/**,**/node_modules/**,**/__pycache__/**,**/*.pyc,**/*venv*/**,venv/**,.venv/**,node_modules/**"
+    ]
     
     # Run trufflehog
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         findings = parse_trufflehog_output(proc.stdout)
         error_msg = proc.stderr if proc.returncode not in [0, 183] else ""
+    except subprocess.TimeoutExpired:
+        findings = []
+        error_msg = f"TruffleHog scan timed out after 180 seconds on repository '{repo_name}'."
+        
+        # Save output report
+        repos_dir = os.path.join(output_dir, "repos")
+        os.makedirs(repos_dir, exist_ok=True)
+        result_file = os.path.join(repos_dir, f"{repo_name.replace('/', '_')}.json")
+        
+        report_data = {
+            "repo_name": repo_name,
+            "is_private": is_private,
+            "scan_status": "clean",
+            "findings": findings,
+            "error": error_msg
+        }
+        
+        with open(result_file, "w") as f:
+            json.dump(report_data, f, indent=2)
+            
+        pytest.fail(error_msg)
     except FileNotFoundError:
         findings = []
         error_msg = f"TruffleHog executable not found. Checked path: '{trufflehog_bin}'. Please ensure TruffleHog is installed and available in the system PATH."
@@ -211,4 +238,50 @@ def test_scan_repo_trufflehog_not_found_graceful(tmp_path, monkeypatch) -> None:
         assert data["repo_name"] == "org/test-repo"
         assert data["scan_status"] == "clean"
         assert "TruffleHog executable not found" in data["error"]
+
+
+def test_scan_repo_timeout_graceful(tmp_path, monkeypatch) -> None:
+    """Verifies that test_scan_repo handles subprocess.TimeoutExpired gracefully."""
+    import test_scanner
+    
+    # Mock format_repo_url to avoid network dependencies
+    monkeypatch.setattr(test_scanner, "format_repo_url", lambda url: "https://github.com/org/test-repo")
+    monkeypatch.setattr(test_scanner, "get_gh_token", lambda: "mock_token")
+    monkeypatch.setattr(test_scanner, "find_executable", lambda name: f"/mock/path/{name}")
+    
+    # Mock subprocess.run to raise subprocess.TimeoutExpired
+    def mock_run(cmd, *args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=180, output="", stderr="")
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    class MockConfig:
+        def getoption(self, name):
+            if name == "--output-dir":
+                return str(tmp_path)
+            return None
+            
+    class MockRequest:
+        config = MockConfig()
+        
+    repo_info = {
+        "name": "org/test-repo",
+        "is_private": False,
+        "ssh_url": "git@github.com:org/test-repo.git"
+    }
+    
+    # The test should fail with pytest.fail showing our custom message
+    with pytest.raises(pytest.fail.Exception) as exc_info:
+        test_scanner.test_scan_repo(repo_info, MockRequest())
+        
+    assert "TruffleHog scan timed out" in str(exc_info.value)
+    
+    # Verify JSON report exists and is marked as clean with timeout error
+    result_file = tmp_path / "repos" / "org_test-repo.json"
+    assert result_file.exists()
+    with open(result_file, "r") as f:
+        data = json.load(f)
+        assert data["repo_name"] == "org/test-repo"
+        assert data["scan_status"] == "clean"
+        assert "TruffleHog scan timed out" in data["error"]
+
 

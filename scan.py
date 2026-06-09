@@ -22,6 +22,7 @@ def verify_tools():
 
 def main():
     verify_tools()
+    os.environ["GIT_TERMINAL_PROMPT"] = "0"
     
     parser = argparse.ArgumentParser(description="TruffleHog organization secrets scanner.")
     parser.add_argument("--org", required=True, help="GitHub Organization name.")

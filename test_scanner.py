@@ -123,7 +123,7 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         "--json", 
         "--no-verification", 
         "--no-update",
-        "--exclude-globs=**/venv/**,**/.venv/**,**/node_modules/**,**/__pycache__/**,**/*.pyc,**/*venv*/**,venv/**,.venv/**,node_modules/**"
+        "--exclude-globs=**/venv/**,**/.venv/**,**/node_modules/**,**/__pycache__/**,**/*.pyc,**/*venv*/**,venv/**,.venv/**,node_modules/**,**/python_modules/**,python_modules/**"
     ]
     
     # Run trufflehog

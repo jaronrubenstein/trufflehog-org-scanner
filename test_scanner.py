@@ -101,6 +101,8 @@ def test_parse_trufflehog_output_sanitizes_secrets() -> None:
 def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) -> None:
     """Scans a parameterized repository using TruffleHog git scanner."""
     os.environ["GIT_TERMINAL_PROMPT"] = "0"
+    os.environ["GIT_ASKPASS"] = "true"
+    os.environ["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
     output_dir = request.config.getoption("--output-dir")
     os.makedirs(output_dir, exist_ok=True)
     

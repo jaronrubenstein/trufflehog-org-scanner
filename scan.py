@@ -23,6 +23,8 @@ def verify_tools():
 def main():
     verify_tools()
     os.environ["GIT_TERMINAL_PROMPT"] = "0"
+    os.environ["GIT_ASKPASS"] = "true"
+    os.environ["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
     
     parser = argparse.ArgumentParser(description="TruffleHog organization secrets scanner.")
     parser.add_argument("--org", required=True, help="GitHub Organization name.")

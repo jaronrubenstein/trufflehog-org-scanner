@@ -2,6 +2,8 @@
 
 A high-performance, parallelized Python-based scanner that automates secret and credential detection across all accessible repositories in any GitHub Organization.
 
+![TruffleHog Scan Dashboard Preview](assets/dashboard.png)
+
 ---
 
 ## ✨ Features

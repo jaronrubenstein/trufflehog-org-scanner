@@ -2,5 +2,4 @@ __pycache__/
 .pytest_cache/
 scans/
 .env
-docs/bin/
-*.json
+docs/

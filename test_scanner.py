@@ -76,6 +76,10 @@ def get_gh_token() -> str:
     except Exception:
         return ""
 
+def get_gitlab_token() -> str:
+    """Retrieves the active GitLab auth token from the environment."""
+    return os.environ.get("GITLAB_TOKEN") or ""
+
 def test_format_repo_url() -> None:
     """Verifies that format_repo_url correctly normalizes diverse git clone URL formats."""
     assert format_repo_url("git@github.com:org/repo.git") == "https://github.com/org/repo"
@@ -108,14 +112,20 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
     
     repo_name = repo_info["name"]
     is_private = repo_info["is_private"]
+    provider = repo_info.get("provider", "github")
     
     # Formulate HTTPS URL dynamically
     repo_url = format_repo_url(repo_info["ssh_url"])
     
     # Inject token if private or if token is available
-    token = get_gh_token()
-    if token:
-        repo_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
+    if provider == "github":
+        token = get_gh_token()
+        if token:
+            repo_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
+    elif provider == "gitlab":
+        token = get_gitlab_token()
+        if token:
+            repo_url = repo_url.replace("https://", f"https://oauth2:{token}@")
     
     trufflehog_bin = find_executable("trufflehog")
     cmd = [

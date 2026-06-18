@@ -8,9 +8,10 @@ import shutil
 from discover import discover_repos, discover_repo, find_executable
 from report import generate_html_report
 
-def verify_tools():
+def verify_tools(provider: str = "github"):
     missing = []
-    for tool in ["gh", "trufflehog"]:
+    tools_to_check = ["gh", "trufflehog"] if provider == "github" else ["glab", "trufflehog"]
+    for tool in tools_to_check:
         path = find_executable(tool)
         # If the path returned is just the name and shutil.which doesn't find it, it's missing
         if path == tool and not shutil.which(tool):
@@ -21,7 +22,6 @@ def verify_tools():
         sys.exit(1)
 
 def main():
-    verify_tools()
     os.environ["GIT_TERMINAL_PROMPT"] = "0"
     os.environ["GIT_ASKPASS"] = "true"
     os.environ["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes"
@@ -32,19 +32,22 @@ def main():
     parser.add_argument("--output-dir", default="scans", help="Output reports directory.")
     parser.add_argument("--threads", default="auto", help="Number of parallel pytest threads.")
     parser.add_argument("--exclude", default="", help="Comma separated list of repo names to exclude.")
+    parser.add_argument("--provider", default="github", choices=["github", "gitlab"], help="Version control provider.")
     
     args = parser.parse_args()
     
+    verify_tools(args.provider)
+
     if args.repo:
         print(f"🔍 Locating specific repository: {args.org}/{args.repo}")
-        repo_data = discover_repo(args.org, args.repo)
+        repo_data = discover_repo(args.org, args.repo, args.provider)
         if not repo_data:
             print(f"Repository {args.org}/{args.repo} not found or unable to fetch.", file=sys.stderr)
             sys.exit(1)
         repos = [repo_data]
     else:
         print(f"🔍 Locating repositories in organization: {args.org}")
-        repos = discover_repos(args.org)
+        repos = discover_repos(args.org, args.provider)
         if not repos:
             print("No repositories found or unable to fetch.", file=sys.stderr)
             sys.exit(1)
@@ -54,20 +57,26 @@ def main():
         repos = [r for r in repos if r["name"] not in exclude_list]
         print(f"📁 Discovered {len(repos)} repositories (excluding: {len(exclude_list)})")
     
+    for repo in repos:
+        repo["provider"] = args.provider
+
     # Save list to temporary file for pytest param parsing
     temp_file = os.path.join(args.output_dir, "active_repos.json")
     os.makedirs(args.output_dir, exist_ok=True)
     with open(temp_file, "w") as f:
         json.dump(repos, f)
         
-    # Resolve gh auth token once and inject into environment for parallel workers
-    try:
-        gh_bin = find_executable("gh")
-        res = subprocess.run([gh_bin, "auth", "token"], capture_output=True, text=True, check=True)
-        token = res.stdout.strip()
-        if token:
-            os.environ["GITHUB_TOKEN"] = token
-    except Exception:
+    if args.provider == "github":
+        # Resolve gh auth token once and inject into environment for parallel workers
+        try:
+            gh_bin = find_executable("gh")
+            res = subprocess.run([gh_bin, "auth", "token"], capture_output=True, text=True, check=True)
+            token = res.stdout.strip()
+            if token:
+                os.environ["GITHUB_TOKEN"] = token
+        except Exception:
+            pass
+    elif args.provider == "gitlab":
         pass
         
     # Execute pytest with pytest-xdist parallelization

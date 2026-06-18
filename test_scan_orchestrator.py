@@ -28,10 +28,38 @@ def test_main_cli_orchestration(tmp_path):
         with patch.object(sys, 'argv', test_args):
             main()
             
-        mock_discover.assert_called_once_with("my-org")
+        mock_discover.assert_called_once_with("my-org", "github")
         mock_pytest.assert_called_once()
         mock_report.assert_called_once_with(output_dir)
-        mock_verify.assert_called_once()
+        mock_verify.assert_called_once_with("github")
+
+def test_main_cli_orchestration_gitlab(tmp_path):
+    output_dir = str(tmp_path)
+
+    with patch("scan.discover_repos") as mock_discover, \
+         patch("pytest.main") as mock_pytest, \
+         patch("scan.generate_html_report") as mock_report, \
+         patch("subprocess.run") as mock_run, \
+         patch("scan.verify_tools") as mock_verify:
+
+        from scan import main
+
+        mock_discover.return_value = [
+            {"name": "org/repo1", "ssh_url": "git@gitlab.com:org/repo1.git", "is_private": True, "pushed_at": "123"}
+        ]
+        mock_pytest.return_value = 0
+        mock_report.return_value = os.path.join(output_dir, "summary.html")
+        mock_run.return_value = MagicMock(returncode=0)
+
+        test_args = ["scan.py", "--org", "my-org", "--provider", "gitlab", "--output-dir", output_dir]
+        with patch.object(sys, 'argv', test_args):
+            main()
+
+        mock_discover.assert_called_once_with("my-org", "gitlab")
+        mock_pytest.assert_called_once()
+        mock_report.assert_called_once_with(output_dir)
+        mock_verify.assert_called_once_with("gitlab")
+
 
 def test_main_cli_single_repo(tmp_path):
     output_dir = str(tmp_path)
@@ -55,9 +83,9 @@ def test_main_cli_single_repo(tmp_path):
         with patch.object(sys, 'argv', test_args):
             main()
             
-        mock_discover_repo.assert_called_once_with("my-org", "repo1")
+        mock_discover_repo.assert_called_once_with("my-org", "repo1", "github")
         mock_pytest.assert_called_once()
         mock_report.assert_called_once_with(output_dir)
-        mock_verify.assert_called_once()
+        mock_verify.assert_called_once_with("github")
 
 

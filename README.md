@@ -20,7 +20,7 @@ A high-performance, parallelized Python-based scanner that automates secret and 
   - **Dark Mode Toggle:** Smooth transitions between slate-tinted Light and Dark themes.
 - **Security-First Architecture:** 
   - Raw secrets are **never** logged to the CLI, console, or written to reports. Only non-sensitive metadata and masked credentials (redacted) are preserved.
-  - Active GitHub tokens exist only in-memory and are never written to disk or configuration dumps.
+  - Active GitHub/GitLab tokens exist only in-memory and are never written to disk or configuration dumps.
   - Strict protection against shell injection via list-based subprocess executions.
 
 ---
@@ -59,12 +59,24 @@ Before running the tool, ensure you have the following CLI utilities installed a
    cd trufflehog-org-scanner
    ```
 
-2. Install the required Python dependencies:
+2. Install the required CLI tool (`gh` or `glab`) if you haven't already:
+
+   **For GitHub CLI (`gh`):**
+   - **macOS:** `brew install gh`
+   - **Linux (Ubuntu/Debian):** Follow the [Official installation guide](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) or run `sudo apt install gh` (on newer releases).
+   - **Windows:** `winget install --id GitHub.cli` or `choco install gh`
+
+   **For GitLab CLI (`glab`):**
+   - **macOS:** `brew install glab`
+   - **Linux (Ubuntu/Debian/Fedora):** `sudo apt install glab` or `sudo dnf install glab`
+   - **Windows:** `winget install --id GitLab.glab` or `scoop install glab`
+
+3. Install the required Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Authenticate with your chosen version control provider:
+4. Authenticate with your chosen version control provider:
    **For GitHub:**
    ```bash
    gh auth login
@@ -75,7 +87,7 @@ Before running the tool, ensure you have the following CLI utilities installed a
    ```bash
    export GITLAB_TOKEN="your_personal_access_token"
    ```
-   *Note: Ensure your authenticated session has standard read permissions for the target organization's repositories.*
+   *Note: Ensure your authenticated session has standard read permissions for the target organization's or group's repositories.*
 
 ---
 
@@ -95,7 +107,7 @@ python3 scan.py --org my-gitlab-group --provider gitlab
 ```
 
 ### Scan a Single Specific Repository
-To scan only a single repository within your organization (e.g. `my-awesome-app`):
+To scan only a single repository within your organization or group (e.g. `my-awesome-app`):
 ```bash
 python3 scan.py --org my-organization --repo my-awesome-app
 ```

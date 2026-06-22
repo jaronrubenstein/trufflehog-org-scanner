@@ -1,6 +1,6 @@
-# 🛡️ TruffleHog GitHub Organization Scanner
+# 🛡️ TruffleHog GitHub/GitLab Organization Scanner
 
-A high-performance, parallelized Python-based scanner that automates secret and credential detection across all accessible repositories in any GitHub Organization.
+A high-performance, parallelized Python-based scanner that automates secret and credential detection across all accessible repositories in any GitHub Organization or GitLab Group.
 
 ![TruffleHog Scan Dashboard Preview](assets/dashboard.png)
 
@@ -8,7 +8,7 @@ A high-performance, parallelized Python-based scanner that automates secret and 
 
 ## ✨ Features
 
-- **Automated Repository Discovery:** Integrates directly with the GitHub CLI (`gh`) to automatically fetch all accessible public and private organizational repositories.
+- **Automated Repository Discovery:** Integrates directly with the GitHub CLI (`gh`) and GitLab CLI (`glab`) to automatically fetch all accessible public and private organizational repositories.
 - **Deep Git History Scan:** Leverages TruffleHog (Community Edition) to scan the entire git commit history of discovered repositories.
 - **Visual Parallel Execution:** Built on top of **pytest** and **pytest-xdist** to run scans concurrently in parallel workers. Features real-time terminal progress indicators.
 - **Interactive Light-Mode HTML Dashboard:** Compiles a standalone responsive summary page (`scans/summary.html`) featuring:
@@ -45,8 +45,9 @@ scans/                      # Main output directory (configurable)
 Before running the tool, ensure you have the following CLI utilities installed and available on your system `PATH`:
 
 1. **Python 3.10+**
-2. **GitHub CLI (`gh`)** - [Download & Install](https://cli.github.com/)
-3. **TruffleHog (v3+)** - [Download & Install](https://github.com/trufflesecurity/trufflehog)
+2. **GitHub CLI (`gh`)** - [Download & Install](https://cli.github.com/) (Required for GitHub scanning)
+3. **GitLab CLI (`glab`)** - [Download & Install](https://gitlab.com/gitlab-org/cli) (Required for GitLab scanning)
+4. **TruffleHog (v3+)** - [Download & Install](https://github.com/trufflesecurity/trufflehog)
 
 ---
 
@@ -63,9 +64,16 @@ Before running the tool, ensure you have the following CLI utilities installed a
    pip install -r requirements.txt
    ```
 
-3. Authenticate with your GitHub account using the GitHub CLI:
+3. Authenticate with your chosen version control provider:
+   **For GitHub:**
    ```bash
    gh auth login
+   ```
+
+   **For GitLab:**
+   Provide your API token via the environment variable:
+   ```bash
+   export GITLAB_TOKEN="your_personal_access_token"
    ```
    *Note: Ensure your authenticated session has standard read permissions for the target organization's repositories.*
 
@@ -76,9 +84,14 @@ Before running the tool, ensure you have the following CLI utilities installed a
 Use the `scan.py` orchestrator script to execute a scan.
 
 ### Basic Organization Scan
-To scan all repositories in an organization (e.g., `my-organization`):
+To scan all repositories in a GitHub organization (e.g., `my-organization`):
 ```bash
 python3 scan.py --org my-organization
+```
+
+To scan all repositories in a GitLab group (e.g., `my-gitlab-group`):
+```bash
+python3 scan.py --org my-gitlab-group --provider gitlab
 ```
 
 ### Scan a Single Specific Repository

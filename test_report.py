@@ -135,3 +135,69 @@ def test_generate_html_report_resilience_to_malformed_json(tmp_path) -> None:
         results = json.load(f)
     assert len(results) == 1
     assert results[0]["repo_name"] == "org/valid"
+
+
+def test_generate_html_report_organization_segmenting(tmp_path) -> None:
+    """Verifies that generate_html_report handles organization parsing, sorting, and metadata inclusion correctly."""
+    output_dir = str(tmp_path)
+    repos_dir = os.path.join(output_dir, "repos")
+    os.makedirs(repos_dir, exist_ok=True)
+    
+    # 1. Repo with explicit 'org'
+    repo_explicit = {
+        "repo_name": "project-a",
+        "org": "explicit-org",
+        "is_private": False,
+        "scan_status": "clean",
+        "findings": [],
+        "error": ""
+    }
+    
+    # 2. Repo with implicit 'org' in repo_name (e.g. "implicit-org/project-b")
+    repo_implicit_name = {
+        "repo_name": "implicit-org/project-b",
+        "is_private": False,
+        "scan_status": "clean",
+        "findings": [],
+        "error": ""
+    }
+    
+    # 3. Repo with implicit 'org' in filename only (e.g. filename "filename-org_project-c.json")
+    repo_implicit_file = {
+        "repo_name": "project-c",
+        "is_private": False,
+        "scan_status": "clean",
+        "findings": [],
+        "error": ""
+    }
+    
+    with open(os.path.join(repos_dir, "explicit-org_project-a.json"), "w") as f:
+        json.dump(repo_explicit, f)
+    with open(os.path.join(repos_dir, "implicit-org_project-b.json"), "w") as f:
+        json.dump(repo_implicit_name, f)
+    with open(os.path.join(repos_dir, "filename-org_project-c.json"), "w") as f:
+        json.dump(repo_implicit_file, f)
+        
+    generate_html_report(output_dir)
+    
+    # Verify summary.json
+    summary_json_path = os.path.join(output_dir, "summary.json")
+    assert os.path.exists(summary_json_path)
+    
+    with open(summary_json_path, "r") as f:
+        results = json.load(f)
+        
+    assert len(results) == 3
+    
+    # Check that organizations were parsed correctly
+    # Sorted order of org names: "explicit-org", "filename-org", "implicit-org"
+    
+    assert results[0]["org"] == "explicit-org"
+    assert results[0]["repo_name"] == "project-a"
+    
+    assert results[1]["org"] == "filename-org"
+    assert results[1]["repo_name"] == "project-c"
+    
+    assert results[2]["org"] == "implicit-org"
+    assert results[2]["repo_name"] == "implicit-org/project-b"
+

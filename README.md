@@ -83,11 +83,13 @@ Before running the tool, ensure you have the following CLI utilities installed a
    ```
 
    **For GitLab:**
-   Provide your API token via the environment variable:
+   Provide your personal, group, or project access token via the environment variable:
    ```bash
    export GITLAB_TOKEN="your_personal_access_token"
    ```
-   *Note: Ensure your authenticated session has standard read permissions for the target organization's or group's repositories.*
+   *Note: When creating a fine-grained or scoped access token, the following scopes are required:*
+   - **`read_api`**: Required to query the GitLab API to list subgroups and discover repositories.
+   - **`read_repository`**: Required to clone and read private repositories during scan execution.
 
 ---
 

@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from unittest.mock import patch, MagicMock
 import pytest
 
@@ -87,5 +88,71 @@ def test_main_cli_single_repo(tmp_path):
         mock_pytest.assert_called_once()
         mock_report.assert_called_once_with(output_dir)
         mock_verify.assert_called_once_with("github")
+
+
+def test_main_cli_removal_org(tmp_path):
+    output_dir = str(tmp_path)
+    repos_dir = os.path.join(output_dir, "repos")
+    os.makedirs(repos_dir, exist_ok=True)
+    
+    # Write a test scan JSON file
+    scan_file = os.path.join(repos_dir, "my-org_repo1.json")
+    with open(scan_file, "w") as f:
+        json.dump({
+            "repo_name": "repo1",
+            "org": "my-org",
+            "scan_status": "clean",
+            "findings": [],
+            "error": ""
+        }, f)
+        
+    with patch("scan.generate_html_report") as mock_report:
+        mock_report.return_value = os.path.join(output_dir, "summary.html")
+        
+        from scan import main
+        test_args = ["scan.py", "--remove-org", "my-org", "--output-dir", output_dir]
+        
+        with patch.object(sys, 'argv', test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+                
+            assert exc_info.value.code == 0
+            
+        # File should have been removed
+        assert not os.path.exists(scan_file)
+        mock_report.assert_called_once_with(output_dir)
+
+
+def test_main_cli_removal_repo(tmp_path):
+    output_dir = str(tmp_path)
+    repos_dir = os.path.join(output_dir, "repos")
+    os.makedirs(repos_dir, exist_ok=True)
+    
+    # Write a test scan JSON file
+    scan_file = os.path.join(repos_dir, "my-org_repo1.json")
+    with open(scan_file, "w") as f:
+        json.dump({
+            "repo_name": "my-org/repo1",
+            "org": "my-org",
+            "scan_status": "clean",
+            "findings": [],
+            "error": ""
+        }, f)
+        
+    with patch("scan.generate_html_report") as mock_report:
+        mock_report.return_value = os.path.join(output_dir, "summary.html")
+        
+        from scan import main
+        test_args = ["scan.py", "--remove-repo", "my-org/repo1", "--output-dir", output_dir]
+        
+        with patch.object(sys, 'argv', test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+                
+            assert exc_info.value.code == 0
+            
+        # File should have been removed
+        assert not os.path.exists(scan_file)
+        mock_report.assert_called_once_with(output_dir)
 
 

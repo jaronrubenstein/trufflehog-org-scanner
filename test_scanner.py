@@ -113,6 +113,21 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
     repo_name = repo_info["name"]
     is_private = repo_info["is_private"]
     provider = repo_info.get("provider", "github")
+    org = repo_info.get("org", "")
+    
+    # Formulate output file path dynamically with organization prefix to avoid collisions
+    repos_dir = os.path.join(output_dir, "repos")
+    os.makedirs(repos_dir, exist_ok=True)
+    norm_name = repo_name.replace('/', '_')
+    if org:
+        norm_org = org.replace('/', '_')
+        if norm_name.startswith(f"{norm_org}_"):
+            filename = f"{norm_name}.json"
+        else:
+            filename = f"{norm_org}_{norm_name}.json"
+    else:
+        filename = f"{norm_name}.json"
+    result_file = os.path.join(repos_dir, filename)
     
     # Formulate HTTPS URL dynamically
     repo_url = format_repo_url(repo_info["ssh_url"])
@@ -145,13 +160,9 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         findings = []
         error_msg = f"TruffleHog scan timed out after 180 seconds on repository '{repo_name}'."
         
-        # Save output report
-        repos_dir = os.path.join(output_dir, "repos")
-        os.makedirs(repos_dir, exist_ok=True)
-        result_file = os.path.join(repos_dir, f"{repo_name.replace('/', '_')}.json")
-        
         report_data = {
             "repo_name": repo_name,
+            "org": org,
             "is_private": is_private,
             "scan_status": "clean",
             "findings": findings,
@@ -166,13 +177,9 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         findings = []
         error_msg = f"TruffleHog executable not found. Checked path: '{trufflehog_bin}'. Please ensure TruffleHog is installed and available in the system PATH."
         
-        # Save output report
-        repos_dir = os.path.join(output_dir, "repos")
-        os.makedirs(repos_dir, exist_ok=True)
-        result_file = os.path.join(repos_dir, f"{repo_name.replace('/', '_')}.json")
-        
         report_data = {
             "repo_name": repo_name,
+            "org": org,
             "is_private": is_private,
             "scan_status": "clean",
             "findings": findings,
@@ -185,12 +192,9 @@ def test_scan_repo(repo_info: dict[str, Any], request: pytest.FixtureRequest) ->
         pytest.fail(error_msg)
     
     # Save output report
-    repos_dir = os.path.join(output_dir, "repos")
-    os.makedirs(repos_dir, exist_ok=True)
-    result_file = os.path.join(repos_dir, f"{repo_name.replace('/', '_')}.json")
-    
     report_data = {
         "repo_name": repo_name,
+        "org": org,
         "is_private": is_private,
         "scan_status": "clean" if len(findings) == 0 else "compromised",
         "findings": findings,

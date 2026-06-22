@@ -141,6 +141,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             gap: 1rem;
             margin-bottom: 1.5rem;
             flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .org-select {
+            padding: 0.75rem 1.25rem;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 700;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            cursor: pointer;
+        }
+        .org-select:focus {
+            outline: none;
+            border-color: var(--color-info);
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
         }
 
         .search-input {
@@ -180,6 +199,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             background: var(--color-info);
             color: white;
             border-color: var(--color-info);
+        }
+
+        .org-section {
+            margin-bottom: 2.5rem;
+        }
+        .org-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .org-section-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .org-section-meta {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
         }
 
         .repo-row {
@@ -333,6 +375,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </section>
 
         <section class="controls" aria-label="Controls and Filters">
+            <select class="org-select" id="org-select" onchange="handleOrgChange()" aria-label="Filter by Organization">
+                <option value="all">All Organizations</option>
+            </select>
             <input type="text" class="search-input" id="search-input" placeholder="Search repositories..." oninput="filterRepos()" aria-label="Search repositories">
             <button class="filter-btn active" id="btn-all" onclick="setFilter('all')">All</button>
             <button class="filter-btn" id="btn-clean" onclick="setFilter('clean')">Clean</button>
@@ -345,96 +390,157 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <script>
         const scanData = __SCAN_DATA_PLACEHOLDER__;
         let activeFilter = 'all';
+        let activeOrg = 'all';
 
         function init() {
-            let scanned = scanData.length;
-            let clean = scanData.filter(r => r.scan_status === 'clean').length;
-            let compromised = scanData.filter(r => r.scan_status === 'compromised').length;
-            let totalSecrets = scanData.reduce((acc, r) => acc + (r.findings ? r.findings.length : 0), 0);
+            // Store original index for correct expand/collapse handling
+            scanData.forEach((repo, idx) => {
+                repo.originalIndex = idx;
+            });
+
+            // Populate organization dropdown dynamically
+            const orgSelect = document.getElementById('org-select');
+            const orgs = [...new Set(scanData.map(r => r.org || 'Unknown'))].sort();
+            orgs.forEach(org => {
+                const opt = document.createElement('option');
+                opt.value = org;
+                opt.innerText = org;
+                orgSelect.appendChild(opt);
+            });
+
+            updateStatsAndList();
+        }
+
+        function updateStatsAndList() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+
+            // Filter data based on active filters and search
+            const filteredData = scanData.filter(repo => {
+                const matchesOrg = activeOrg === 'all' || (repo.org || 'Unknown') === activeOrg;
+                const matchesFilter = activeFilter === 'all' || repo.scan_status === activeFilter;
+                const matchesSearch = repo.repo_name.toLowerCase().includes(searchTerm) || 
+                                      (repo.org || '').toLowerCase().includes(searchTerm);
+                return matchesOrg && matchesFilter && matchesSearch;
+            });
+
+            // Update stats cards
+            let scanned = filteredData.length;
+            let clean = filteredData.filter(r => r.scan_status === 'clean').length;
+            let compromised = filteredData.filter(r => r.scan_status === 'compromised').length;
+            let totalSecrets = filteredData.reduce((acc, r) => acc + (r.findings ? r.findings.length : 0), 0);
 
             document.getElementById('stat-scanned').innerText = scanned;
             document.getElementById('stat-clean').innerText = clean;
             document.getElementById('stat-compromised').innerText = compromised;
             document.getElementById('stat-secrets').innerText = totalSecrets;
 
-            renderList();
-        }
-
-        function renderList() {
+            // Render repo list grouped by organization
             const container = document.getElementById('repo-list');
             container.innerHTML = '';
-            
-            const searchTerm = document.getElementById('search-input').value.toLowerCase();
 
-            scanData.forEach((repo, idx) => {
-                const matchesSearch = repo.repo_name.toLowerCase().includes(searchTerm);
-                const matchesFilter = activeFilter === 'all' || repo.scan_status === activeFilter;
+            if (filteredData.length === 0) {
+                container.innerHTML = '<div class="card" style="text-align: center; color: var(--text-secondary); padding: 3rem;">No repositories matching the current filters.</div>';
+                return;
+            }
 
-                if (!matchesSearch || !matchesFilter) return;
+            // Group by organization
+            const grouped = {};
+            filteredData.forEach(repo => {
+                const org = repo.org || 'Unknown';
+                if (!grouped[org]) grouped[org] = [];
+                grouped[org].push(repo);
+            });
 
-                const row = document.createElement('div');
-                row.className = 'repo-row';
+            // Render each organization section
+            const sortedOrgs = Object.keys(grouped).sort();
+            sortedOrgs.forEach(orgName => {
+                const orgRepos = grouped[orgName];
+                
+                const orgSection = document.createElement('section');
+                orgSection.className = 'org-section';
+                orgSection.setAttribute('aria-label', `Organization ${orgName}`);
 
-                let findingsHTML = '<p style="margin: 0; font-weight: 500;">No findings. Repository is clean.</p>';
-                if (repo.findings && repo.findings.length > 0) {
-                    findingsHTML = `
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Detector</th>
-                                        <th>File Path</th>
-                                        <th>Line</th>
-                                        <th>Commit</th>
-                                        <th>Masked Key</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${repo.findings.map(f => `
+                const orgHeader = document.createElement('div');
+                orgHeader.className = 'org-section-header';
+
+                const orgCleanCount = orgRepos.filter(r => r.scan_status === 'clean').length;
+                const orgCompromisedCount = orgRepos.filter(r => r.scan_status === 'compromised').length;
+
+                orgHeader.innerHTML = `
+                    <h2 class="org-section-title">🏢 ${escapeHTML(orgName)}</h2>
+                    <span class="org-section-meta">${orgRepos.length} repos (${orgCleanCount} clean, ${orgCompromisedCount} compromised)</span>
+                `;
+                orgSection.appendChild(orgHeader);
+
+                orgRepos.forEach(repo => {
+                    const idx = repo.originalIndex;
+                    const row = document.createElement('div');
+                    row.className = 'repo-row';
+
+                    let findingsHTML = '<p style="margin: 0; font-weight: 500;">No findings. Repository is clean.</p>';
+                    if (repo.findings && repo.findings.length > 0) {
+                        findingsHTML = `
+                            <div class="table-container">
+                                <table>
+                                    <thead>
                                         <tr>
-                                            <td><strong>${escapeHTML(f.detector)}</strong></td>
-                                            <td><code>${escapeHTML(f.file)}</code></td>
-                                            <td>${f.line}</td>
-                                            <td><code>${escapeHTML((f.commit || '').substring(0, 8))}</code></td>
-                                            <td><span class="secret-masked">${escapeHTML(f.redacted)}</span></td>
+                                            <th>Detector</th>
+                                            <th>File Path</th>
+                                            <th>Line</th>
+                                            <th>Commit</th>
+                                            <th>Masked Key</th>
                                         </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        ${repo.findings.map(f => `
+                                            <tr>
+                                                <td><strong>${escapeHTML(f.detector)}</strong></td>
+                                                <td><code>${escapeHTML(f.file)}</code></td>
+                                                <td>${f.line}</td>
+                                                <td><code>${escapeHTML((f.commit || '').substring(0, 8))}</code></td>
+                                                <td><span class="secret-masked">${escapeHTML(f.redacted)}</span></td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } else if (repo.error) {
+                        findingsHTML = `<pre>Error scanning repo: ${escapeHTML(repo.error)}</pre>`;
+                    }
+
+                    row.innerHTML = `
+                        <div class="repo-header" 
+                             role="button" 
+                             tabindex="0" 
+                             aria-expanded="false"
+                             aria-controls="detail-${idx}"
+                             onclick="toggleDetail(${idx})" 
+                             onkeydown="handleHeaderKey(event, ${idx})">
+                            <div class="repo-info">
+                                <span class="repo-name">${escapeHTML(repo.repo_name)}</span>
+                                ${repo.is_private ? '<span class="badge private">Private</span>' : ''}
+                            </div>
+                            <div>
+                                <span class="badge ${repo.scan_status === 'clean' ? 'pass' : 'fail'}">
+                                    ${repo.scan_status === 'clean' ? 'PASSED' : 'COMPROMISED'}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="findings-detail" id="detail-${idx}">
+                            ${findingsHTML}
                         </div>
                     `;
-                } else if (repo.error) {
-                    findingsHTML = `<pre>Error scanning repo: ${escapeHTML(repo.error)}</pre>`;
-                }
+                    orgSection.appendChild(row);
+                });
 
-                row.innerHTML = `
-                    <div class="repo-header" 
-                         role="button" 
-                         tabindex="0" 
-                         aria-expanded="false"
-                         aria-controls="detail-${idx}"
-                         onclick="toggleDetail(${idx})" 
-                         onkeydown="handleHeaderKey(event, ${idx})">
-                        <div class="repo-info">
-                            <span class="repo-name">${escapeHTML(repo.repo_name)}</span>
-                            ${repo.is_private ? '<span class="badge private">Private</span>' : ''}
-                        </div>
-                        <div>
-                            <span class="badge ${repo.scan_status === 'clean' ? 'pass' : 'fail'}">
-                                ${repo.scan_status === 'clean' ? 'PASSED' : 'COMPROMISED'}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="findings-detail" id="detail-${idx}">
-                        ${findingsHTML}
-                    </div>
-                `;
-                container.appendChild(row);
+                container.appendChild(orgSection);
             });
         }
 
         function toggleDetail(idx) {
             const el = document.getElementById(`detail-${idx}`);
+            if (!el) return;
             const header = el.previousElementSibling;
             const isExpanding = !el.classList.contains('active');
             
@@ -450,14 +556,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         function filterRepos() {
-            renderList();
+            updateStatsAndList();
         }
 
         function setFilter(filter) {
             activeFilter = filter;
             document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`btn-${filter}`).classList.add('active');
-            renderList();
+            updateStatsAndList();
+        }
+
+        function handleOrgChange() {
+            activeOrg = document.getElementById('org-select').value;
+            updateStatsAndList();
         }
 
         function toggleTheme() {
@@ -481,6 +592,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+
 def generate_html_report(output_dir: str) -> str:
     """Collects individual JSON repository scan results and builds a cohesive summary HTML page.
     
@@ -502,13 +614,24 @@ def generate_html_report(output_dir: str) -> str:
                         data = json.load(f)
                         # Basic validation to verify schema
                         if "repo_name" in data and "scan_status" in data:
+                            org = data.get("org")
+                            if not org:
+                                if "/" in data["repo_name"]:
+                                    org = data["repo_name"].split("/")[0]
+                                else:
+                                    base = os.path.splitext(filename)[0]
+                                    if "_" in base:
+                                        org = base.split("_")[0]
+                                    else:
+                                        org = "Unknown"
+                            data["org"] = org
                             results.append(data)
                 except Exception:
                     # Ignore unreadable/corrupted files gracefully as per robustness specifications
                     continue
                 
-    # Sort results prioritizing 'compromised' status, then alphabetically by name
-    results.sort(key=lambda x: (x.get("scan_status") != "compromised", x.get("repo_name", "")))
+    # Sort results prioritizing organization first, then compromised status, then alphabetically by name
+    results.sort(key=lambda x: (x.get("org", "").lower(), x.get("scan_status") != "compromised", x.get("repo_name", "").lower()))
     
     # Save a global dataset for programmatic consumption
     summary_path = os.path.join(output_dir, "summary.json")
